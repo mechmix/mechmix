@@ -19,8 +19,8 @@ assert os.name=='nt','This verification must run on native Windows'
 assert not ctypes.windll.shell32.IsUserAnAdmin(),'Verification must run without administrator privileges'
 os.environ['TEAM_PDF_AUTOTEST']='1'
 log=results/'launcher.log'
-command='call "'+str(root/'Start Converter.cmd')+'" --self-test --test-output "'+str(results/'self-test')+'"'
-run=subprocess.run(['cmd.exe','/d','/c',command],cwd=root,capture_output=True,text=True,errors='replace',timeout=600)
+command='cmd.exe /d /s /c ""'+str(root/'Start Converter.cmd')+'" --self-test --test-output "'+str(results/'self-test')+'""'
+run=subprocess.run(command,cwd=root,capture_output=True,text=True,errors='replace',timeout=600)
 log.write_text(run.stdout+'\n'+run.stderr,encoding='utf-8')
 assert run.returncode==0,'Launcher failed; see launcher.log'
 checks=json.loads((results/'self-test/verification.json').read_text())
