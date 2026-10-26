@@ -11,10 +11,12 @@ try:
  with sync_playwright() as play:
   browser=play.chromium.launch();page=browser.new_page(viewport={'width':1100,'height':1000})
   page.goto((root/'ui-url.txt').read_text());page.get_by_role('button',name='Choose files',exact=True).wait_for()
-  page.locator('#picker').set_input_files(str(root/'fixtures/generated.bdr'))
+  reported=root.parent/'reported-drawing.vsdx'
+  file=reported if reported.is_file() else root/'fixtures/generated.bdr'
+  page.locator('#picker').set_input_files(str(file))
   page.get_by_text('Saved to Downloads',exact=False).first.wait_for(timeout=180000)
   page.screenshot(path=str(root/'browser-conversion.png'),full_page=True)
   assert not page.locator('.row.error').count()
   browser.close()
- (root/'browser-verification.json').write_text(json.dumps({'passed':True,'upload_bdr':True}))
+ (root/'browser-verification.json').write_text(json.dumps({'passed':True,'upload_bdr':not reported.is_file(),'reported_vsdx':reported.is_file()}))
 finally:(root/'ui-finished.txt').write_text('finished')
