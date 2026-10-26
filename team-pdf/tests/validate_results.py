@@ -15,3 +15,7 @@ print('Validated',len(files),'nonempty PDFs and rendered previews from native Wi
 combined='\n'.join(page.extract_text() or '' for file in files if 'generated (4)' in file.name for page in PdfReader(file).pages)
 assert 'Bidirectional OTDR results' in combined and 'BDR A to B trace' in combined and 'BDR B to A trace' in combined
 assert '0.010' in combined and '-0.030' in combined, 'Stored mean and reverse loss must survive PDF conversion'
+
+for file in files:
+ if "media-drawing" in file.name:
+  assert len(PdfReader(file).pages[0].images)>0, "Embedded bitmap missing from Visio PDF"
