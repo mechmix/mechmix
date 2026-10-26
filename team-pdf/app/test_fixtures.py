@@ -55,4 +55,6 @@ def make_trc(path,bidirectional=False):
 def create_all(folder):
     folder=pathlib.Path(folder);folder.mkdir(parents=True,exist_ok=True)
     make_drawing(folder/'generated.vsdx');make_sor(folder/'generated.sor');make_trc(folder/'generated.trc');make_trc(folder/'generated.bdr',bidirectional=True)
-    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc',folder/'generated.bdr']
+    from media_fixture import create
+    create(folder/'media-drawing.vsdx')
+    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc',folder/'generated.bdr',folder/'media-drawing.vsdx']
