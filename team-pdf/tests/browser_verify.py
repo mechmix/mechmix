@@ -3,6 +3,8 @@ from playwright.sync_api import sync_playwright
 p=argparse.ArgumentParser();p.add_argument('folder');args=p.parse_args();root=pathlib.Path(args.folder)
 deadline=time.monotonic()+400
 while not (root/'server-ready.txt').exists():
+ if (root/'exit-code.txt').exists():
+  raise RuntimeError('Native standard-user checks ended before browser startup. Inspect the generated verification report.')
  if time.monotonic()>deadline:raise RuntimeError('Native standard-user server did not become ready')
  time.sleep(1)
 try:

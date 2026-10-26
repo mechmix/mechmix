@@ -61,7 +61,7 @@ try:
  while not (results/'ui-finished.txt').exists():
   if time.monotonic()>deadline:raise RuntimeError('Browser verification did not complete')
   time.sleep(.5)
- report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC'],'browser_endpoint':True,'self_checks':checks}
+ report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC'],'browser_endpoint':True,'self_checks':[{'input':r['input'],'format':r.get('format'),'passed':r['passed']} for r in checks['results']]}
  (results/'native-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 finally:
  process.terminate()

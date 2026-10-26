@@ -5,6 +5,7 @@ import os
 import pathlib
 import shutil
 import sys
+import time
 import urllib.request
 import zipfile
 
@@ -22,11 +23,30 @@ def digest(p):
 
 def download(url,name,expected=None):
  DOWNLOADS.mkdir(exist_ok=True);p=DOWNLOADS/name
- if not p.exists():
-  print('Downloading '+name,flush=True)
-  with urllib.request.urlopen(url,timeout=120) as r,p.open('wb') as f:shutil.copyfileobj(r,f)
- if expected and digest(p)!=expected:raise ValueError('Download checksum mismatch: '+name)
- return p
+ if p.exists() and (not expected or digest(p)==expected):
+  print('Using cached '+name,flush=True);return p
+ urls=[url]
+ if url==LO_URL:
+  suffix='/libreoffice/portable/26.2.4/LibreOfficePortable_26.2.4_MultilingualStandard.paf.exe'
+  urls=['https://ftp.wayne.edu/tdf'+suffix,'https://mirror.fcix.net/tdf'+suffix,url]
+ error=None
+ for candidate in urls:
+  partial=p.with_suffix(p.suffix+'.part')
+  try:
+   print('Downloading '+name+' from '+candidate,flush=True);started=time.monotonic();count=0;next_report=20*1024*1024
+   with urllib.request.urlopen(candidate,timeout=30) as response,partial.open('wb') as stream:
+    while True:
+     block=response.read(1024*1024)
+     if not block:break
+     stream.write(block);count+=len(block)
+     if count>=next_report:
+      print('%s: %s MiB received'%(name,count//1024//1024),flush=True);next_report+=20*1024*1024
+     if time.monotonic()-started>180:raise TimeoutError('Mirror download took too long')
+   if expected and digest(partial)!=expected:raise ValueError('Download checksum mismatch: '+name)
+   partial.replace(p);return p
+  except Exception as e:
+   error=e;partial.unlink(missing_ok=True);print('Download attempt failed: '+str(e),flush=True)
+ raise RuntimeError('Could not download '+name) from error
 
 def build(archive_tool,office_source=None):
  import subprocess
@@ -39,7 +59,7 @@ def build(archive_tool,office_source=None):
  else:
   extraction=ROOT/'build/office-extracted'
   extraction.mkdir(parents=True,exist_ok=True)
-  subprocess.run([str(archive_tool),'x','-y','-o'+str(extraction),str(lo)],check=True)
+  subprocess.run([str(archive_tool),'x','-y','-o'+str(extraction),'-xr!help','-xr!dict-*','-xr!nlpsolver','-xr!wiki-publisher','-xr!$PLUGINSDIR',str(lo)],check=True)
   office=extraction/'App/libreoffice'
  if not (office/'program/soffice.com').is_file():raise ValueError('Office extraction is incomplete')
  shutil.copytree(ROOT/'app',BUILD/'app',ignore=shutil.ignore_patterns('__pycache__','testassets'))
@@ -48,7 +68,11 @@ def build(archive_tool,office_source=None):
  payload=BUILD/'office.zip'
  with zipfile.ZipFile(payload,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
   for p in sorted(office.rglob('*')):
-   if p.is_file():archive.write(p,p.relative_to(office).as_posix())
+   if p.is_file():
+    relative=p.relative_to(office)
+    if relative.parts[0]=='help' or relative.parts[:2]==('share','extensions'):
+     continue
+    archive.write(p,relative.as_posix())
  required=['program/soffice.com','program/soffice.bin','program/mergedlo.dll','program/sdlo.dll','program/services/services.rdb','share/registry/draw.xcd']
  spec={'version':'26.2.4','sha256':digest(payload),'required':{name:digest(office/name) for name in required}}
  (BUILD/'office-manifest.json').write_text(json.dumps(spec,indent=2))

@@ -26,6 +26,27 @@ def cache_root():
     base=pathlib.Path(os.environ.get('LOCALAPPDATA') or tempfile.gettempdir())
     return base/'TeamPDF'
 
+def acquire_lock(path,timeout=600):
+    # The OS releases this lock if first-run extraction is interrupted.
+    descriptor=os.open(path,os.O_CREAT|os.O_RDWR)
+    if os.fstat(descriptor).st_size==0:os.write(descriptor,b'0')
+    deadline=time.monotonic()+timeout
+    while True:
+        try:
+            os.lseek(descriptor,0,os.SEEK_SET)
+            if os.name=='nt':
+                import msvcrt
+                msvcrt.locking(descriptor,msvcrt.LK_NBLCK,1)
+            else:
+                import fcntl
+                fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            return descriptor
+        except OSError:
+            if time.monotonic()>deadline:
+                os.close(descriptor)
+                raise RuntimeError('Engine preparation is already running. Wait for the first converter window to finish.')
+            time.sleep(.25)
+
 def engine_directory():
     spec=json.loads((APP_ROOT/'office-manifest.json').read_text(encoding='utf-8'))
     target=cache_root()/('o-'+spec['sha256'][:12])
@@ -39,19 +60,19 @@ def engine_directory():
     if not payload.is_file() or sha256(payload)!=spec['sha256']:
         raise RuntimeError('The office bundle is incomplete or damaged. Download the complete ZIP and use Extract All again.')
     target.parent.mkdir(parents=True,exist_ok=True)
-    lock=target.with_suffix('.lock');deadline=time.monotonic()+240
-    while True:
-        try:
-            descriptor=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY);os.close(descriptor);break
-        except FileExistsError:
-            if valid():return target
-            if time.monotonic()>deadline:raise RuntimeError('Engine preparation is already running or was interrupted. Close other converter windows and retry; see the setup log if this continues.')
-            time.sleep(.25)
+    lock=target.with_suffix('.lock')
+    descriptor=acquire_lock(lock)
+    if valid():
+        os.close(descriptor)
+        return target
     stage=pathlib.Path(tempfile.mkdtemp(prefix='office-',dir=str(target.parent)))
     try:
         print('Preparing the bundled conversion engine. This is needed only once.',flush=True)
         with zipfile.ZipFile(payload) as archive:
-            for entry in archive.infolist():
+            entries=archive.infolist()
+            for index,entry in enumerate(entries,1):
+                if index%1000==0:
+                    print('Preparing engine: %s / %s files'%(index,len(entries)),flush=True)
                 rel=pathlib.PurePosixPath(entry.filename)
                 if rel.is_absolute() or '..' in rel.parts or any(':' in part or '\\' in part for part in rel.parts):raise ValueError('Unsafe path in bundled engine.')
                 out=stage.joinpath(*rel.parts)
@@ -66,4 +87,4 @@ def engine_directory():
         return target
     finally:
         if stage.exists():shutil.rmtree(native(stage),ignore_errors=True)
-        lock.unlink(missing_ok=True)
+        os.close(descriptor)
