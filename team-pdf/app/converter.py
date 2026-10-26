@@ -10,7 +10,7 @@ import zipfile
 from platform_tools import downloads_dir
 from engine_support import run_engine, failure_message
 
-TITLE = 'Visio, SOR & TRC to PDF'
+TITLE = 'Visio, SOR, TRC & BDR to PDF'
 
 def engine():
     from portable_runtime import engine_directory
@@ -21,8 +21,8 @@ def engine():
 
 def convert(source, destination, executable=None):
     source = pathlib.Path(source).resolve()
-    if source.suffix.lower() not in ('.vsdx', '.vsd', '.sor', '.trc'):
-        raise ValueError('Please select a .vsdx, .vsd, .sor, or EXFO .trc file.')
+    if source.suffix.lower() not in ('.vsdx', '.vsd', '.sor', '.trc', '.bdr'):
+        raise ValueError('Please select a .vsdx, .vsd, .sor, EXFO .trc or .bdr file.')
     if not source.is_file():
         raise ValueError('The source file could not be found.')
     destination = pathlib.Path(destination).resolve()
@@ -50,6 +50,9 @@ def convert(source, destination, executable=None):
         pdf = output_dir / 'drawing.pdf'
         if source.suffix.lower() == '.sor':
             from sor_report import create_report
+            create_report(source, pdf)
+        elif source.suffix.lower() == '.bdr':
+            from bdr_report import create_report
             create_report(source, pdf)
         elif source.suffix.lower() == '.trc':
             from trc_report import create_report

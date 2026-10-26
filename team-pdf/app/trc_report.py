@@ -9,18 +9,19 @@ def number(value,decimals=3,unit=''):
     if not isinstance(value,(float,int)) or not math.isfinite(value):return 'Not recorded'
     return ('%.*f'%(decimals,value))+unit
 
-def footer(pdf,page):
+def footer(pdf,page,format_name="TRC"):
     pdf.line(42,42,570,42)
-    pdf.text(42,26,'TRC data report | Recorded measurements; no pass/fail assessment',8)
+    pdf.text(42,26,format_name+' data report | Recorded measurements; no pass/fail assessment',8)
     pdf.text(535,26,page,9)
 
-def create_report(source,output):
-    traces=read_trc(source);pdf=PDF();filename=pathlib.Path(source).name;page=0
+def create_report(source,output,traces=None,pdf=None,page=0):
+    traces=read_trc(source) if traces is None else traces;pdf=pdf or PDF();filename=pathlib.Path(source).name
     for index,item in enumerate(traces,1):
         t=item['trace'];f=item['fiber'];events=item['events'];points=item['points'];custom=item['custom'];module=item['module'];job=item['job']
         label=(f.get('Identifier') or custom.get('Fiber ID') or 'Unidentified fiber')+' / '+number(t.get('Wavelength',0)*1e9,0,' nm')
         context=filename+' | Trace %s of %s | %s'%(index,len(traces),label)
-        page+=1;header(pdf,context,'TRC trace overview')
+        if item.get('direction'):context+=' | '+item['direction']
+        page+=1;header(pdf,context,('BDR '+item['direction']+' trace') if item.get('direction') else 'TRC trace overview')
         pairs=[('FIBER / WAVELENGTH',label),('MODULE',module.get('ModelName') or 'Not recorded'),('STORED SPAN LENGTH',number(t.get('SpansLength'),3,' m')),('STORED SPAN LOSS / ORL',number(t.get('SpansLoss'))+' / '+number(t.get('TotalOrl'),3,' dB'))]
         for n,(caption,value) in enumerate(pairs):
             x=42+(n%2)*270;y=650-(n//2)*48
@@ -32,7 +33,7 @@ def create_report(source,output):
         zoom=min(points[-1][0]/1000,max(.5,span_end*1.1))
         graph(pdf,points,marks,zoom,118,'Fiber span detail',xmin=max(0,points[0][0]/1000),axis='Stored distance position (km)')
         pdf.text(42,63,'Stored coordinates are retained, including negative launch positions. Levels are relative dB.',8)
-        footer(pdf,page);pdf.page()
+        footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page()
         page+=1;header(pdf,context,'Recorded events & sections');y=647
         pdf.text(42,y,'Point events',12,True);y-=25
         def event_header(y):
@@ -41,7 +42,7 @@ def create_report(source,output):
         event_header(y);y-=28
         for n,e in enumerate(events,1):
             if y<100:
-                footer(pdf,page);pdf.page();page+=1;header(pdf,context,'Point events (continued)');y=647;event_header(y);y-=28
+                footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page();page+=1;header(pdf,context,'Point events (continued)');y=647;event_header(y);y-=28
             flags=[]
             if e.get('Status',0)&0x40:flags.append('Start')
             if e.get('Status',0)&0x80:flags.append('End')
@@ -51,7 +52,7 @@ def create_report(source,output):
             pdf.line(42,y-9,570,y-9);y-=23
         y-=20
         if y<200:
-            footer(pdf,page);pdf.page();page+=1;header(pdf,context,'Recorded fiber sections');y=647
+            footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page();page+=1;header(pdf,context,'Recorded fiber sections');y=647
         pdf.text(42,y,'Fiber sections',12,True);y-=24
         def section_header(y):
             for x,label in [(42,'#'),(67,'Start (km)'),(163,'Length (m)'),(286,'Loss (dB)'),(407,'Calculated dB/km')]:pdf.text(x,y,label,8,True)
@@ -59,17 +60,17 @@ def create_report(source,output):
         section_header(y);y-=26
         for n,e in enumerate(item['segments'],1):
             if y<100:
-                footer(pdf,page);pdf.page();page+=1;header(pdf,context,'Fiber sections (continued)');y=647;section_header(y);y-=26
+                footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page();page+=1;header(pdf,context,'Fiber sections (continued)');y=647;section_header(y);y-=26
             length=e.get('Length');loss=e.get('Loss');slope=loss/length*1000 if isinstance(length,(float,int)) and length>0 and isinstance(loss,(float,int)) else None
             pdf.text(42,y,n,9);pdf.text(67,y,number(e.get('Position',float('nan'))/1000,4),9);pdf.text(163,y,number(length),9);pdf.text(286,y,number(loss),9);pdf.text(407,y,number(slope),9);y-=18
         pdf.text(42,max(60,y-13),'Section attenuation is calculated from stored loss / length. Unset values remain "Not recorded".',8)
-        footer(pdf,page);pdf.page()
+        footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page()
         page+=1;header(pdf,context,'Acquisition settings');y=648
         acq=item['acquisition'];exact=acq[0].get('ExactWavelength')*1e9 if acq and acq[0].get('ExactWavelength') else None
         settings=[('File format','EXFO AppReg Format Ex'),('Test date (as stored)',t.get('Date') or 'Not recorded'),('Fiber ID',f.get('Identifier') or custom.get('Fiber ID') or 'Not recorded'),('Cable ID',f.get('Cable') or custom.get('Cable ID') or 'Not recorded'),('Location A / B',(f.get('LocationA') or '-')+' / '+(f.get('LocationB') or '-')),('Module / serial',(module.get('ModelName') or '-')+' / '+(module.get('SerialNumber') or '-')),('Nominal / exact wavelength',number(t.get('Wavelength',0)*1e9,1)+' / '+number(exact,1,' nm')),('Pulse / duration',number(t.get('Pulse',0)*1e9,1,' ns')+' / '+str(t.get('Duration','Not recorded'))+' s'),('Group index',number(item['ior'],6)),('Sample interval / count',number(item['step'],6,' m')+' / '+str(len(points))),('Stored trace origin',number(item['origin'],6,' m')),('Nominal acquisition range',number(t.get('Range'),3,' m')),('Job identifier',job.get('Identifier') or 'Not recorded'),('Job user / customer',(job.get('UserNameA') or '-')+' / '+(job.get('CustomerName') or '-')),('Stored span length / loss',number(t.get('SpansLength'),3,' m')+' / '+number(t.get('SpansLoss'),3,' dB')),('Stored total ORL',number(t.get('TotalOrl'),3,' dB'))]
         for label,value in settings:
             if y<200:
-                footer(pdf,page);pdf.page();page+=1;header(pdf,context,'Settings (continued)');y=648
+                footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page();page+=1;header(pdf,context,'Settings (continued)');y=648
             pdf.text(42,y,label,9,True)
             lines=textwrap.wrap(str(value),57) or ['Not recorded']
             for j,line in enumerate(lines):pdf.text(240,y-12*j,line,9)
@@ -79,9 +80,9 @@ def create_report(source,output):
         for note in notes:
             lines=textwrap.wrap(note,99)
             if y-len(lines)*11<58:
-                footer(pdf,page);pdf.page();page+=1;header(pdf,context,'Report notes');y=648
+                footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page();page+=1;header(pdf,context,'Report notes');y=648
             for line in lines:pdf.text(42,y,line,8);y-=11
             y-=7
-        footer(pdf,page);pdf.page()
+        footer(pdf,page,"BDR" if item.get("direction") else "TRC");pdf.page()
     pdf.save(output)
     return traces

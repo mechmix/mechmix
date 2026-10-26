@@ -64,8 +64,8 @@ def make_server(destination=None):
                 filename = parse_qs(path.query).get('name', [''])[0]
                 if not filename or any(c in filename for c in '/\\:<>"|?*') or any(ord(c) < 32 for c in filename) or filename.endswith((' ', '.')):
                     raise ValueError('Invalid filename.')
-                if pathlib.Path(filename).suffix.lower() not in ('.vsdx', '.vsd', '.sor', '.trc'):
-                    raise ValueError('Please choose a .vsdx, .vsd, .sor, or EXFO .trc file.')
+                if pathlib.Path(filename).suffix.lower() not in ('.vsdx', '.vsd', '.sor', '.trc', '.bdr'):
+                    raise ValueError('Please choose a .vsdx, .vsd, .sor, EXFO .trc or .bdr file.')
                 self.connection.settimeout(180)
                 content = self.rfile.read(length)
                 if len(content) != length:

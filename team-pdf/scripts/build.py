@@ -103,9 +103,9 @@ exit /b 1\r
  (BUILD/'Start Converter.cmd').write_bytes(launcher.encode('ascii'))
  (BUILD/'Check Converter.cmd').write_bytes(b'@echo off\r\ncall "%~dp0Start Converter.cmd" --self-test\r\npause\r\n')
  shutil.copyfile(ROOT/'README.md',BUILD/'READ ME FIRST.txt')
- components={'version':'2.0','python':{'url':PY_URL,'sha256':PY_SHA,'license':'runtime/LICENSE.txt'},'office':{'url':LO_URL,'sha256':LO_SHA,'source':'https://download.documentfoundation.org/libreoffice/src/26.2.4/','license':'office.zip -> license.txt'},'other_licenses':['app/OTDR-Reader-License.txt','app/TRC-Reader-License.txt','app/testassets/LICENSE.txt']}
+ components={'version':'2.1','python':{'url':PY_URL,'sha256':PY_SHA,'license':'runtime/LICENSE.txt'},'office':{'url':LO_URL,'sha256':LO_SHA,'source':'https://download.documentfoundation.org/libreoffice/src/26.2.4/','license':'office.zip -> license.txt'},'other_licenses':['app/OTDR-Reader-License.txt','app/TRC-Reader-License.txt','app/testassets/LICENSE.txt']}
  (BUILD/'COMPONENTS.json').write_text(json.dumps(components,indent=2))
- package=DIST/'TeamPDF-Windows-Portable-v2.zip'
+ package=DIST/'TeamPDF-Windows-Portable-v2.1.zip'
  with zipfile.ZipFile(package,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
   for p in sorted(BUILD.rglob('*')):
    if p.is_file():
@@ -114,7 +114,7 @@ exit /b 1\r
     archive.write(p,name,compress_type=zipfile.ZIP_STORED if p.name in ['office.zip','python313.zip'] else zipfile.ZIP_DEFLATED)
  with zipfile.ZipFile(package) as archive:
   if archive.testzip():raise ValueError('Package ZIP integrity failed')
- (DIST/'TeamPDF-Windows-Portable-v2.sha256.txt').write_text(digest(package)+'  '+package.name+'\n')
+ (DIST/'TeamPDF-Windows-Portable-v2.1.sha256.txt').write_text(digest(package)+'  '+package.name+'\n')
  print('BUILT: '+str(package),flush=True)
 
 if __name__=='__main__':

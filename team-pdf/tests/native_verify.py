@@ -25,7 +25,7 @@ log.write_text(run.stdout+'\n'+run.stderr,encoding='utf-8')
 assert run.returncode==0,'Launcher failed; see launcher.log'
 checks=json.loads((results/'self-test/verification.json').read_text())
 assert checks['passed'] and checks['administrator'] is False
-assert {r.get('format') for r in checks['results']} >= {'.vsd','.vsdx','.sor','.trc'}
+assert {r.get('format') for r in checks['results']} >= {'.vsd','.vsdx','.sor','.trc','.bdr'}
 # Verify normal startup, upload endpoint, browser page and actual Downloads output.
 process=subprocess.Popen([str(root/'runtime/python.exe'),'-B',str(root/'app/entry.py'),'--no-browser'],cwd=root,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
 lines=queue.Queue();captured=[]
@@ -61,7 +61,7 @@ try:
  while not (results/'ui-finished.txt').exists():
   if time.monotonic()>deadline:raise RuntimeError('Browser verification did not complete')
   time.sleep(.5)
- report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC'],'browser_endpoint':True,'self_checks':[{'input':r['input'],'format':r.get('format'),'passed':r['passed']} for r in checks['results']]}
+ report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC','BDR'],'browser_endpoint':True,'self_checks':[{'input':r['input'],'format':r.get('format'),'passed':r['passed']} for r in checks['results']]}
  (results/'native-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 finally:
  process.terminate()

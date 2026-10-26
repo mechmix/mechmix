@@ -70,41 +70,44 @@ def read_trc(source):
         for fiber in r.children(otdr['Fibers'],'Fiber'):
             for trace in r.children(fiber['Traces'],'Trace'):
                 if len(traces)>=128:raise ValueError('Too many traces in this TRC file.')
-                sections=r.children(trace['FiberSectionCharacteristics'],'Section')
-                if len(sections)!=1 or abs(sections[0].get('HelixFactor',0))>1e-12:
-                    raise ValueError('Variable fiber index or helix compensation is not yet supported.')
-                ior=finite(sections[0].get('Ior'),'group index',True)
-                step=finite(trace.get('SamplingPeriod'),'sampling period',True)*299792458/(2*ior)
-                scale=finite(trace.get('ScaleFactor'),'sample scale',True)
-                raw_samples=trace.get('RawSamples',b'')
-                if not isinstance(raw_samples,bytes) or len(raw_samples)%2 or not 4<=len(raw_samples)<=4000000:
-                    raise ValueError('Unsupported TRC sample array.')
-                entries=r.children(trace['EventTable'],'Event');events=[e for e in entries if 'Type' in e];segments=[e for e in entries if 'Type' not in e]
-                anchors=[];npts=len(raw_samples)//2
-                for event in events:
-                    for cursor,position in [('CursorA','CursorAPosition'),('CursorB','CursorBPosition')]:
-                        n=event.get(cursor);distance=event.get(position)
-                        if isinstance(n,int) and 0<=n<npts and isinstance(distance,(int,float)) and math.isfinite(distance):
-                            anchors.append(distance-n*step)
-                    finite(event.get('Position'),'event position')
-                if len(anchors)<2:raise ValueError('TRC coordinates cannot be validated against stored event cursors.')
-                origin=statistics.median(anchors)
-                if max(abs(a-origin) for a in anchors)>.02:
-                    raise ValueError('TRC event cursors disagree with the trace distance scale.')
-                points=[(origin+i*step,value/scale) for i,(value,) in enumerate(struct.iter_unpack('<H',raw_samples))]
-                # For this format the logarithmic samples match stored event CurveLevel.
-                errors=[]
-                for event in events:
-                    n=event.get('CursorA');level=event.get('CurveLevel')
-                    if isinstance(n,int) and 0<=n<npts and isinstance(level,(float,int)) and math.isfinite(level):errors.append(abs(points[n][1]-level))
-                if not errors or statistics.median(errors)>1:
-                    raise ValueError('TRC sample scaling cannot be validated against recorded event levels.')
-                custom={}
-                if 'CustomIDList' in trace:
-                    custom={item.get('Name'):item.get('Value') for item in r.children(trace['CustomIDList'],'CustomID')}
-                acq=r.children(trace['AcquisitionDatas'],'AcquisitionData') if 'AcquisitionDatas' in trace else []
-                traces.append({'fiber':fiber,'trace':trace,'module':r.node(trace['ModuleInformation']) if 'ModuleInformation' in trace else {},'job':r.node(trace['JobInformation']) if 'JobInformation' in trace else {},'events':events,'segments':segments,'points':points,'step':step,'origin':origin,'ior':ior,'custom':custom,'acquisition':acq})
+                traces.append(decode_trace(r,fiber,trace))
         if not traces:raise ValueError('No trace records were found.')
         return traces
     except (KeyError,IndexError,struct.error,zlib.error,UnicodeError) as error:
         raise ValueError('Could not read this TRC container: missing, damaged, or unsupported records.') from error
+
+def decode_trace(r,fiber,trace):
+    sections=r.children(trace['FiberSectionCharacteristics'],'Section')
+    if len(sections)!=1 or abs(sections[0].get('HelixFactor',0))>1e-12:
+        raise ValueError('Variable fiber index or helix compensation is not yet supported.')
+    ior=finite(sections[0].get('Ior'),'group index',True)
+    step=finite(trace.get('SamplingPeriod'),'sampling period',True)*299792458/(2*ior)
+    scale=finite(trace.get('ScaleFactor'),'sample scale',True)
+    raw_samples=trace.get('RawSamples',b'')
+    if not isinstance(raw_samples,bytes) or len(raw_samples)%2 or not 4<=len(raw_samples)<=4000000:
+        raise ValueError('Unsupported TRC sample array.')
+    entries=r.children(trace['EventTable'],'Event');events=[e for e in entries if 'Type' in e];segments=[e for e in entries if 'Type' not in e]
+    anchors=[];npts=len(raw_samples)//2
+    for event in events:
+        for cursor,position in [('CursorA','CursorAPosition'),('CursorB','CursorBPosition')]:
+            n=event.get(cursor);distance=event.get(position)
+            if isinstance(n,int) and 0<=n<npts and isinstance(distance,(int,float)) and math.isfinite(distance):
+                anchors.append(distance-n*step)
+        finite(event.get('Position'),'event position')
+    if len(anchors)<2:raise ValueError('TRC coordinates cannot be validated against stored event cursors.')
+    origin=statistics.median(anchors)
+    if max(abs(a-origin) for a in anchors)>.02:
+        raise ValueError('TRC event cursors disagree with the trace distance scale.')
+    points=[(origin+i*step,value/scale) for i,(value,) in enumerate(struct.iter_unpack('<H',raw_samples))]
+    # For this format the logarithmic samples match stored event CurveLevel.
+    errors=[]
+    for event in events:
+        n=event.get('CursorA');level=event.get('CurveLevel')
+        if isinstance(n,int) and 0<=n<npts and isinstance(level,(float,int)) and math.isfinite(level):errors.append(abs(points[n][1]-level))
+    if not errors or statistics.median(errors)>1:
+        raise ValueError('TRC sample scaling cannot be validated against recorded event levels.')
+    custom={}
+    if 'CustomIDList' in trace:
+        custom={item.get('Name'):item.get('Value') for item in r.children(trace['CustomIDList'],'CustomID')}
+    acq=r.children(trace['AcquisitionDatas'],'AcquisitionData') if 'AcquisitionDatas' in trace else []
+    return {'fiber':fiber,'trace':trace,'module':r.node(trace['ModuleInformation']) if 'ModuleInformation' in trace else {},'job':r.node(trace['JobInformation']) if 'JobInformation' in trace else {},'events':events,'segments':segments,'points':points,'step':step,'origin':origin,'ior':ior,'custom':custom,'acquisition':acq}

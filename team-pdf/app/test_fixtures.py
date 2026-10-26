@@ -17,12 +17,25 @@ def make_sor(path):
     mapping=b'Map\0'+struct.pack('<HIH',200,size,len(blocks)+1)+b''.join(text(n)+struct.pack('<HI',200,len(b)) for n,b in blocks)
     pathlib.Path(path).write_bytes(mapping+b''.join(b for _,b in blocks))
 
-def make_trc(path):
+def make_trc(path,bidirectional=False):
     ior=1.468325;period=3.125e-9;step=period*299792458/(2*ior);origin=-100*step
     event=lambda cursor,status:{'Position':origin+cursor*step,'Length':step*4,'Type':3,'Status':status,'CursorA':cursor,'CursorB':cursor+4,'CursorAPosition':origin+cursor*step,'CursorBPosition':origin+(cursor+4)*step,'Loss':float('nan') if cursor in [0,900] else .05,'Reflectance':-45.0,'CurveLevel':20-cursor*.001}
     segment=lambda cursor,length:{'Position':origin+cursor*step,'Length':length*step,'Loss':.1}
     trace={'EventTable':{'Count':5,'Event0':event(0,8),'Event1':segment(0,100),'Event2':event(100,64),'Event3':segment(100,800),'Event4':event(900,128)},'SamplingPeriod':period,'ScaleFactor':1024.0,'RawSamples':b''.join(struct.pack('<H',int((20-i*.001)*1024)) for i in range(1200)),'FiberSectionCharacteristics':{'Count':1,'Section0':{'Ior':ior,'HelixFactor':0.0}},'ModuleInformation':{'ModelName':'Synthetic test module','SerialNumber':'DEMO'},'AcquisitionDatas':{'Count':1,'AcquisitionData0':{'ExactWavelength':1.55e-6}},'Wavelength':1.55e-6,'Date':'2024-01-01T12:00:00','Pulse':30e-9,'Duration':15,'Range':1000.0,'SpansLength':800*step,'SpansLoss':.25,'TotalOrl':35.0}
     tree={'OtdrData':{'Fibers':{'Count':1,'Fiber0':{'Identifier':'Demo fiber','Traces':{'Count':1,'Trace0':trace}}}}}
+    if bidirectional:
+        import copy
+        reverse=copy.deepcopy(trace)
+        reverse['SpansLoss']=.35
+        reverse['EventTable']['Event2']['Loss']=-.03
+        paired={}
+        for i in range(5):
+            ab=trace['EventTable']['Event'+str(i)];ba=reverse['EventTable']['Event'+str(i)]
+            entry={'EventAB':ab,'EventBA':ba,'MeanPosition':ab['Position'],'MeanLength':ab['Length'],'MeanLoss':(ab['Loss']+ba['Loss'])/2}
+            if 'Type' in ab:entry.update(Type=ab['Type'],Status=ab['Status'],HighestReflectance=-44.0)
+            paired['Event'+str(i)]=entry
+        paired['Count']=5
+        tree={'OtdrData':{'BidirectionalFibers':{'Count':1,'BidirectionalFiber0':{'FiberAB':{'Identifier':'Demo bidirectional fiber'},'FiberBA':{'Identifier':'Demo bidirectional fiber'},'BidirectionalTraces':{'Count':1,'BidirectionalTrace0':{'TraceAB':trace,'TraceBA':reverse,'EventTable':paired,'Date':'2024-01-01T12:00:00'}}}}}}
     buf=bytearray(12)
     def add(name,value):
         off=len(buf);buf.extend(bytes(16));name_off=len(buf);buf.extend(name.encode()+b'\0')
@@ -41,5 +54,5 @@ def make_trc(path):
 
 def create_all(folder):
     folder=pathlib.Path(folder);folder.mkdir(parents=True,exist_ok=True)
-    make_drawing(folder/'generated.vsdx');make_sor(folder/'generated.sor');make_trc(folder/'generated.trc')
-    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc']
+    make_drawing(folder/'generated.vsdx');make_sor(folder/'generated.sor');make_trc(folder/'generated.trc');make_trc(folder/'generated.bdr',bidirectional=True)
+    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc',folder/'generated.bdr']

@@ -10,7 +10,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--self-test',action='store_true');p.add_argument('--test-output');p.add_argument('--no-browser',action='store_true');args=p.parse_args()
     engine_directory()
     manifest=json.loads((APP_ROOT/'office-manifest.json').read_text())
-    marker=cache_root()/('verified-'+manifest['sha256'][:12]+'-v2.txt')
+    marker=cache_root()/('verified-'+manifest['sha256'][:12]+'-v2.1.txt')
     if args.self_test or not marker.exists():
         print('Checking VSD, VSDX, SOR and TRC conversion...',flush=True)
         from self_test import run
