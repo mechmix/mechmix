@@ -1,4 +1,4 @@
-TEAM PDF CONVERTER - WINDOWS PORTABLE v2.1
+TEAM PDF CONVERTER - WINDOWS PORTABLE v2.2
 
 Download the ZIP, right-click it and choose Extract All, then open TeamPDF
 and double-click Start Converter.cmd. Keep its window open while converting.

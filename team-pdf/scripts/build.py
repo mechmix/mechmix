@@ -15,6 +15,9 @@ PY_URL='https://www.python.org/ftp/python/3.13.14/python-3.13.14-embed-amd64.zip
 LO_URL='https://download.documentfoundation.org/libreoffice/portable/26.2.4/LibreOfficePortable_26.2.4_MultilingualStandard.paf.exe'
 PY_SHA='90b4e5b9898b72d744650524bff92377c367f44bd5fbd09e3148656c080ad907';LO_SHA='4bde93374aef4409243505b20d16561a4628ac7591457dd01fc6e1ccf571ba65'
 
+MSI_URL='https://mirror.fcix.net/tdf/libreoffice/stable/26.8.1/win/x86_64/LibreOffice_26.8.1_Win_x86-64.msi'
+MSI_SHA='c6298b10cfa1748bcbedad94c62ce771e240e5021bfd6d7a967cd571b04b5312'
+
 def digest(p):
  h=hashlib.sha256()
  with open(p,'rb') as f:
@@ -60,7 +63,20 @@ def build(archive_tool,office_source=None):
   extraction=ROOT/'build/office-extracted'
   extraction.mkdir(parents=True,exist_ok=True)
   subprocess.run([str(archive_tool),'x','-y','-o'+str(extraction),'-xr!help','-xr!dict-*','-xr!nlpsolver','-xr!wiki-publisher','-xr!$PLUGINSDIR',str(lo)],check=True)
-  office=extraction/'App/libreoffice'
+  runtime_source=extraction/'App/libreoffice'
+  msi=download(MSI_URL,'office-26.8.1.msi',MSI_SHA)
+  modern=ROOT/'build/office-26.8.1'
+  modern.mkdir(parents=True,exist_ok=True)
+  # Administrative extraction runs on the build machine only; users receive files, no installer.
+  result=subprocess.run(['msiexec.exe','/a',str(msi.resolve()),'/qn','TARGETDIR='+str(modern.resolve())],timeout=300)
+  if result.returncode not in [0,3010]:raise RuntimeError('Office MSI extraction failed: '+str(result.returncode))
+  candidates=list(modern.rglob('program/soffice.com'))
+  if len(candidates)!=1:raise ValueError('Could not locate extracted Office engine')
+  office=candidates[0].parent.parent
+  # Carry the official portable runtime DLLs alongside the newer engine.
+  for pattern in ['msvcp*.dll','vcruntime*.dll','concrt*.dll','ucrtbase.dll','api-ms-win-crt*.dll']:
+   for dll in (runtime_source/'program').glob(pattern):
+    if not (office/'program'/dll.name).exists():shutil.copyfile(dll,office/'program'/dll.name)
  if not (office/'program/soffice.com').is_file():raise ValueError('Office extraction is incomplete')
  shutil.copytree(ROOT/'app',BUILD/'app',ignore=shutil.ignore_patterns('__pycache__','testassets'))
  with zipfile.ZipFile(py) as archive:archive.extractall(BUILD/'runtime')
@@ -74,7 +90,7 @@ def build(archive_tool,office_source=None):
      continue
     archive.write(p,relative.as_posix())
  required=['program/soffice.com','program/soffice.bin','program/mergedlo.dll','program/sdlo.dll','program/services/services.rdb','share/registry/draw.xcd']
- spec={'version':'26.2.4','sha256':digest(payload),'required':{name:digest(office/name) for name in required}}
+ spec={'version':'26.8.1','sha256':digest(payload),'required':{name:digest(office/name) for name in required}}
  (BUILD/'office-manifest.json').write_text(json.dumps(spec,indent=2))
  assets=BUILD/'app/testassets';assets.mkdir()
  fixtures=[('Visio11FormatLine.vsd','example.vsd','c06587d91be2cd43050fb7e9fbc05b4c7e4cb708'),('color-boxes.vsdx','example.vsdx','ef8f6a1298baba23055c664e5794049dbca2f860')]
@@ -103,9 +119,9 @@ exit /b 1\r
  (BUILD/'Start Converter.cmd').write_bytes(launcher.encode('ascii'))
  (BUILD/'Check Converter.cmd').write_bytes(b'@echo off\r\ncall "%~dp0Start Converter.cmd" --self-test\r\npause\r\n')
  shutil.copyfile(ROOT/'README.md',BUILD/'READ ME FIRST.txt')
- components={'version':'2.1','python':{'url':PY_URL,'sha256':PY_SHA,'license':'runtime/LICENSE.txt'},'office':{'url':LO_URL,'sha256':LO_SHA,'source':'https://download.documentfoundation.org/libreoffice/src/26.2.4/','license':'office.zip -> license.txt'},'other_licenses':['app/OTDR-Reader-License.txt','app/TRC-Reader-License.txt','app/testassets/LICENSE.txt']}
+ components={'version':'2.2','python':{'url':PY_URL,'sha256':PY_SHA,'license':'runtime/LICENSE.txt'},'office':{'url':MSI_URL,'sha256':MSI_SHA,'runtime_bundle_url':LO_URL,'runtime_bundle_sha256':LO_SHA,'source':'https://download.documentfoundation.org/libreoffice/src/26.8.1/','license':'office.zip -> license.txt'},'other_licenses':['app/OTDR-Reader-License.txt','app/TRC-Reader-License.txt','app/testassets/LICENSE.txt']}
  (BUILD/'COMPONENTS.json').write_text(json.dumps(components,indent=2))
- package=DIST/'TeamPDF-Windows-Portable-v2.1.zip'
+ package=DIST/'TeamPDF-Windows-Portable-v2.2.zip'
  with zipfile.ZipFile(package,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
   for p in sorted(BUILD.rglob('*')):
    if p.is_file():
@@ -114,7 +130,7 @@ exit /b 1\r
     archive.write(p,name,compress_type=zipfile.ZIP_STORED if p.name in ['office.zip','python313.zip'] else zipfile.ZIP_DEFLATED)
  with zipfile.ZipFile(package) as archive:
   if archive.testzip():raise ValueError('Package ZIP integrity failed')
- (DIST/'TeamPDF-Windows-Portable-v2.1.sha256.txt').write_text(digest(package)+'  '+package.name+'\n')
+ (DIST/'TeamPDF-Windows-Portable-v2.2.sha256.txt').write_text(digest(package)+'  '+package.name+'\n')
  print('BUILT: '+str(package),flush=True)
 
 if __name__=='__main__':
