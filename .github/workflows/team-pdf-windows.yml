@@ -33,6 +33,7 @@ jobs:
           $results = "$base\results"
           New-Item -ItemType Directory -Force $results | Out-Null
           Copy-Item tests/native_verify.py "$base\native_verify.py"
+          Copy-Item tests/fixtures/reported-drawing.vsdx "$base\reported-drawing.vsdx"
           icacls $base /grant '*S-1-5-32-545:(OI)(CI)M' /T /Q | Out-Null
           $password = 'Tpdf!9a' + [guid]::NewGuid().ToString('N')
           Write-Output "::add-mask::$password"
@@ -82,6 +83,7 @@ jobs:
         with:
           name: Windows-test-evidence
           path: |
+            C:/Users/Public/TeamPDF-CI/results/reported-drawing-summary.json
             C:/Users/Public/TeamPDF-CI/results/native-verification.json
             C:/Users/Public/TeamPDF-CI/results/browser-verification.json
             C:/Users/Public/TeamPDF-CI/results/*-preview.png
