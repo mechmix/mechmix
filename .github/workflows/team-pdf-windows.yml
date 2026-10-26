@@ -30,6 +30,8 @@ jobs:
           New-Item -ItemType Directory -Force $base | Out-Null
           $extract = "$base\OneDrive - Example Team\Downloads\Shared Portable Converter Package\Extracted Team Tools\Ready to use"
           Expand-Archive -LiteralPath dist/TeamPDF-Windows-Portable-v2.3.zip -DestinationPath $extract -ErrorAction Stop
+          Copy-Item tests/fixtures/converter-v2.2.py "$extract\TeamPDF\app\converter.py" -Force
+          Expand-Archive -LiteralPath dist/TeamPDF-Windows-Update-v2.3.zip -DestinationPath "$extract\TeamPDF" -Force -ErrorAction Stop
           $results = "$base\results"
           New-Item -ItemType Directory -Force $results | Out-Null
           Copy-Item tests/native_verify.py "$base\native_verify.py"
@@ -74,6 +76,8 @@ jobs:
           path: |
             team-pdf/dist/TeamPDF-Windows-Portable-v2.3.zip
             team-pdf/dist/TeamPDF-Windows-Portable-v2.3.sha256.txt
+            team-pdf/dist/TeamPDF-Windows-Update-v2.3.zip
+            team-pdf/dist/TeamPDF-Windows-Update-v2.3.sha256.txt
             team-pdf/dist/Windows-verification.json
           retention-days: 3
           compression-level: 0

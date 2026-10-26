@@ -131,6 +131,16 @@ exit /b 1\r
  with zipfile.ZipFile(package) as archive:
   if archive.testzip():raise ValueError('Package ZIP integrity failed')
  (DIST/'TeamPDF-Windows-Portable-v2.3.sha256.txt').write_text(digest(package)+'  '+package.name+'\n')
+ # Small overlay for existing v2.2 installs: no engine download or re-extraction.
+ update=DIST/'TeamPDF-Windows-Update-v2.3.zip'
+ update_files=['converter.py','vsdx_compat.py','entry.py','test_fixtures.py','media_fixture.py','self_test.py','diagnose_visio.py','index.html']
+ with zipfile.ZipFile(update,'w',zipfile.ZIP_DEFLATED) as archive:
+  for name in update_files:archive.write(BUILD/'app'/name,'app/'+name)
+  archive.writestr('READ ME - v2.3 Update.txt','Close the old converter terminal. Copy the app folder from this ZIP into your existing v2.2 TeamPDF folder beside Start Converter.cmd. Choose Replace files when asked. Then start Start Converter.cmd again. The window and page should show Version 2.3. This update keeps your existing engine and does not need administrator rights.\n')
+ with zipfile.ZipFile(update) as archive:
+  if archive.testzip():raise ValueError('Update ZIP integrity failed')
+ (DIST/'TeamPDF-Windows-Update-v2.3.sha256.txt').write_text(digest(update)+'  '+update.name+'\n')
+ print('BUILT: '+str(update),flush=True)
  print('BUILT: '+str(package),flush=True)
 
 if __name__=='__main__':
