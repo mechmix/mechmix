@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Local Visio to PDF converter. No third-party Python packages required."""
 import argparse
+import os
 import pathlib
 import shutil
 import subprocess
@@ -27,7 +28,11 @@ def convert(source, destination, executable=None):
         raise ValueError('The source file could not be found.')
     destination = pathlib.Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='visio-pdf-') as tmp:
+    temp_base=None
+    if os.name=='nt':
+        from portable_runtime import cache_root
+        temp_base=cache_root()/'jobs';temp_base.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='job-',dir=temp_base) as tmp:
         root = pathlib.Path(tmp)
         # Normalize the name to isolate input filenames from command-line options.
         extension = source.suffix.lower()
@@ -39,6 +44,8 @@ def convert(source, destination, executable=None):
             else:
                 try:
                     with zipfile.ZipFile(source) as archive:
+                        damaged=archive.testzip()
+                        if damaged:raise ValueError('This VSDX contains a damaged ZIP entry. Download a fresh local copy before converting.')
                         if 'visio/document.xml' not in archive.namelist():
                             raise ValueError('No Visio drawing document exists inside this file.')
                 except zipfile.BadZipFile as error:
@@ -59,9 +66,16 @@ def convert(source, destination, executable=None):
             create_report(source, pdf)
         else:
             executable = executable or engine()
-            result = run_engine([executable, '-env:UserInstallation=' + (root / 'profile').as_uri(), '--headless', '--nologo', '--nodefault', '--norestore', '--infilter=Visio Document', '--convert-to', 'pdf:draw_pdf_Export', '--outdir', str(output_dir), str(input_path)])
-            if result.returncode or not pdf.exists() or not pdf.read_bytes().startswith(b'%PDF-'):
-                raise RuntimeError(failure_message(result))
+            # File URLs avoid Windows path/encoding ambiguities. Retry automatic format
+            # detection with a fresh profile if the explicit Visio import fails.
+            for attempt in range(2):
+                pdf.unlink(missing_ok=True)
+                arguments=[executable, '-env:UserInstallation=' + (root / ('profile-'+str(attempt))).as_uri(), '--headless', '--nologo', '--nodefault', '--norestore']
+                if attempt==0:arguments.append('--infilter=Visio Document')
+                arguments+=['--convert-to','pdf:draw_pdf_Export','--outdir',str(output_dir),input_path.as_uri()]
+                result=run_engine(arguments)
+                if result.returncode==0 and pdf.exists() and pdf.read_bytes().startswith(b'%PDF-'):break
+            else:raise RuntimeError(failure_message(result))
         # Exclusive creation prevents accidental replacement of existing PDFs.
         for number in range(10000):
             suffix = '' if number == 0 else ' (' + str(number + 1) + ')'

@@ -44,8 +44,8 @@ jobs:
           @echo off
           set TEAM_PDF_AUTOTEST=1
           set USERPROFILE=$base\User Home
-          set LOCALAPPDATA=$base\User Home\Local
-          set TEMP=$base\User Home\Temp
+          set "LOCALAPPDATA=$base\User Home\Local"
+          set "TEMP=$base\User Home\Temp"
           set TMP=$base\User Home\Temp
           if not exist "%TEMP%" mkdir "%TEMP%"
           "$extract\TeamPDF\runtime\python.exe" -B "$base\native_verify.py" --package "$extract\TeamPDF" --results "$results" > "$results\standard-user.log" 2>&1
