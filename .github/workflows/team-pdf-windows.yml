@@ -1,0 +1,96 @@
+name: Verify portable converter on Windows
+on:
+  push:
+    branches: [codex/team-pdf-windows-verification]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: team-pdf
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/cache@v4
+        with:
+          path: team-pdf/downloads
+          key: team-pdf-runtime-py31314-lo2681-v1
+      - name: Build the complete portable ZIP
+        run: python scripts/build.py --7zip 'C:\Program Files\7-Zip\7z.exe'
+      - name: Extract using Windows tools into a long, spaced path
+        run: |
+          $base = 'C:\Users\Public\TeamPDF-CI'
+          New-Item -ItemType Directory -Force $base | Out-Null
+          $extract = "$base\OneDrive - Example Team\Downloads\Shared Portable Converter Package\Extracted Team Tools\Ready to use"
+          Expand-Archive -LiteralPath dist/TeamPDF-Windows-Portable-v2.3.zip -DestinationPath $extract -ErrorAction Stop
+          Copy-Item tests/fixtures/converter-v2.2.py "$extract\TeamPDF\app\converter.py" -Force
+          Expand-Archive -LiteralPath dist/TeamPDF-Windows-Update-v2.3.zip -DestinationPath "$extract\TeamPDF" -Force -ErrorAction Stop
+          $results = "$base\results"
+          New-Item -ItemType Directory -Force $results | Out-Null
+          Copy-Item tests/native_verify.py "$base\native_verify.py"
+          Copy-Item tests/fixtures/reported-drawing.vsdx "$base\reported-drawing.vsdx"
+          icacls $base /grant '*S-1-5-32-545:(OI)(CI)M' /T /Q | Out-Null
+          $password = 'Tpdf!9a' + [guid]::NewGuid().ToString('N')
+          Write-Output "::add-mask::$password"
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name TeamPDF_Test -Password $secure -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -Group Users -Member TeamPDF_Test
+          $credential = [pscredential]::new("$env:COMPUTERNAME\TeamPDF_Test", $secure)
+          $batch = @"
+          @echo off
+          set TEAM_PDF_AUTOTEST=1
+          set USERPROFILE=$base\User Home
+          set "LOCALAPPDATA=$base\User Home\Local"
+          set "TEMP=$base\User Home\Temp"
+          set TMP=$base\User Home\Temp
+          if not exist "%TEMP%" mkdir "%TEMP%"
+          "$extract\TeamPDF\runtime\python.exe" -B "$base\native_verify.py" --package "$extract\TeamPDF" --results "$results" > "$results\standard-user.log" 2>&1
+          echo %errorlevel% > "$results\exit-code.txt"
+          "@
+          Set-Content -LiteralPath "$base\run-standard.cmd" -Value $batch -Encoding ascii
+          $proc = Start-Process -FilePath cmd.exe -ArgumentList '/d','/c',"$base\run-standard.cmd" -Credential $credential -LoadUserProfile -PassThru
+          Set-Content -LiteralPath "$base\process-id.txt" -Value $proc.Id
+      - name: Verify the browser interface on Windows
+        run: |
+          python -m pip install playwright pypdf pypdfium2 pillow
+          python -m playwright install chromium
+          python tests/browser_verify.py 'C:\Users\Public\TeamPDF-CI\results'
+      - name: Verify standard-user completion and rendered PDFs
+        run: |
+          $results = 'C:\Users\Public\TeamPDF-CI\results'
+          for ($i=0; $i -lt 60 -and !(Test-Path "$results\exit-code.txt"); $i++) { Start-Sleep -Seconds 1 }
+          if (!(Test-Path "$results\exit-code.txt") -or (Get-Content "$results\exit-code.txt").Trim() -ne '0') { throw 'Standard-user test failed' }
+          python tests/validate_results.py $results
+          Copy-Item "$results\native-verification.json" dist/Windows-verification.json
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-TeamPDF-Windows
+          path: |
+            team-pdf/dist/TeamPDF-Windows-Portable-v2.3.zip
+            team-pdf/dist/TeamPDF-Windows-Portable-v2.3.sha256.txt
+            team-pdf/dist/TeamPDF-Windows-Update-v2.3.zip
+            team-pdf/dist/TeamPDF-Windows-Update-v2.3.sha256.txt
+            team-pdf/dist/Windows-verification.json
+          retention-days: 3
+          compression-level: 0
+      - name: Preserve test reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-test-evidence
+          path: |
+            C:/Users/Public/TeamPDF-CI/results/reported-drawing-summary.json
+            C:/Users/Public/TeamPDF-CI/results/native-verification.json
+            C:/Users/Public/TeamPDF-CI/results/browser-verification.json
+            C:/Users/Public/TeamPDF-CI/results/*-preview.png
+            C:/Users/Public/TeamPDF-CI/results/browser-conversion.png
+            C:/Users/Public/TeamPDF-CI/results/self-test/*.pdf
+          retention-days: 3

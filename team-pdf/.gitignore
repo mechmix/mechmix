@@ -1,0 +1,7 @@
+/build/
+/downloads/
+/dist/
+/results/
+__pycache__/
+*.pyc
+/Logs/
