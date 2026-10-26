@@ -52,6 +52,9 @@ def convert(source, destination, executable=None):
                     raise ValueError('This VSDX file is not a readable Visio ZIP package.') from error
         input_path = root / ('drawing' + extension)
         shutil.copyfile(source, input_path)
+        if extension=='.vsdx':
+            from vsdx_compat import normalize_shape_ids
+            normalize_shape_ids(input_path)
         output_dir = root / 'converted'
         output_dir.mkdir()
         pdf = output_dir / 'drawing.pdf'

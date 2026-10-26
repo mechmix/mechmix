@@ -57,4 +57,10 @@ def create_all(folder):
     make_drawing(folder/'generated.vsdx');make_sor(folder/'generated.sor');make_trc(folder/'generated.trc');make_trc(folder/'generated.bdr',bidirectional=True)
     from media_fixture import create
     create(folder/'media-drawing.vsdx')
-    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc',folder/'generated.bdr',folder/'media-drawing.vsdx']
+    import zipfile
+    sentinel=folder/'deleted-shape-id.vsdx';make_drawing(sentinel)
+    with zipfile.ZipFile(sentinel) as archive:parts={n:archive.read(n) for n in archive.namelist()}
+    parts['visio/pages/page1.xml']=parts['visio/pages/page1.xml'].replace(b'</Shapes>',b'<Shape Del="1" MasterShape="9" ID="4294967295"/></Shapes>')
+    with zipfile.ZipFile(sentinel,'w',zipfile.ZIP_DEFLATED) as archive:
+        for n,data in parts.items():archive.writestr(n,data)
+    return [folder/'generated.vsdx',folder/'generated.sor',folder/'generated.trc',folder/'generated.bdr',folder/'media-drawing.vsdx',sentinel]

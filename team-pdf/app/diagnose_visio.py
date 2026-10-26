@@ -25,20 +25,23 @@ def diagnose(source,output=None,executable=None):
     if report['zip_crc_error'] or not report['has_visio_document']:raise ValueError('The uploaded drawing is damaged or has no Visio document.')
     base=cache_root()/'diagnostics';base.mkdir(parents=True,exist_ok=True)
     executable=executable or engine()
-    cases=[('explicit-original',True,False,{}),('automatic-original',False,False,{}),('automatic-repacked',False,True,{}),('software-rendering',False,False,{'SAL_SKIA':'raster'}),('legacy-emf-rendering',False,False,{'SAL_SKIA':'raster','EMF_PLUS_DISABLE':'1'})]
+    cases=[('explicit-original',True,False,{}),('automatic-original',False,False,{}),('automatic-repacked',False,True,{}),('software-rendering',False,False,{'SAL_SKIA':'raster'}),('legacy-emf-rendering',False,False,{'SAL_SKIA':'raster','EMF_PLUS_DISABLE':'1'}),('compatible-shape-ids',True,False,{})]
     with tempfile.TemporaryDirectory(prefix='diag-',dir=base) as tmp:
         root=pathlib.Path(tmp)
         original=root/'drawing.vsdx';original.write_bytes(data)
         repacked=root/'repacked.vsdx'
         with zipfile.ZipFile(original) as source_zip,zipfile.ZipFile(repacked,'w',zipfile.ZIP_STORED) as dest_zip:
             for entry in source_zip.infolist():dest_zip.writestr(entry.filename,source_zip.read(entry.filename))
+        from vsdx_compat import normalize_shape_ids
+        compatible=root/'compatible.vsdx';shutil.copyfile(original,compatible)
+        report['normalized_shape_ids']=normalize_shape_ids(compatible)
         # Prove repacking changed only ZIP storage, never the document bytes.
         with zipfile.ZipFile(original) as a,zipfile.ZipFile(repacked) as b:
             assert a.namelist()==b.namelist()
             assert all(a.read(n)==b.read(n) for n in a.namelist())
         for index,(label,explicit,repack,overrides) in enumerate(cases):
             print('Checking '+label+' ...',flush=True)
-            case=root/label;case.mkdir();out=case/'pdf';out.mkdir();input_path=repacked if repack else original
+            case=root/label;case.mkdir();out=case/'pdf';out.mkdir();input_path=compatible if label=='compatible-shape-ids' else repacked if repack else original
             arguments=[executable,'-env:UserInstallation='+(case/'profile').as_uri(),'--headless','--nologo','--nodefault','--norestore']
             if explicit:arguments.append('--infilter=Visio Document')
             arguments+=['--convert-to','pdf:draw_pdf_Export','--outdir',str(out),input_path.as_uri()]

@@ -47,7 +47,8 @@ try:
  from test_fixtures import create_all
  from platform_tools import downloads_dir
  fixtures=results/'fixtures';generated=create_all(fixtures)
- for file in generated+[root/'app/testassets/example.vsd',root/'app/testassets/example.vsdx']:
+ reported=pathlib.Path(__file__).parent/'reported-drawing.vsdx'
+ for file in generated+[root/'app/testassets/example.vsd',root/'app/testassets/example.vsdx']+([reported] if reported.is_file() else []):
   filename='CI test '+file.name
   response=urllib.request.urlopen(urllib.request.Request(url+'convert?name='+urllib.parse.quote(filename),data=file.read_bytes()),timeout=240)
   payload=json.load(response);dest=pathlib.Path(payload['folder']);pdf=dest/payload['filename']
@@ -57,14 +58,15 @@ try:
  # Check the optional local diagnostics on generated input, without uploading its raw log.
  from diagnose_visio import diagnose
  diagnostic=diagnose(fixtures/'media-drawing.vsdx',results/'diagnostic-smoke')
- assert len(diagnostic['attempts'])==5 and all(case['passed'] for case in diagnostic['attempts'])
+ assert len(diagnostic['attempts'])==6 and all(case['passed'] for case in diagnostic['attempts'])
  # The user explicitly authorized this one drawing for public Windows testing.
  reported=pathlib.Path(__file__).parent/'reported-drawing.vsdx'
  if reported.is_file():
   real=diagnose(reported,results/'reported-drawing-diagnostics')
-  summary={'source_sha256':real['source_sha256'],'source_bytes':real['source_bytes'],'attempts':[{'method':case['method'],'passed':case['passed'],'exit_code':case.get('exit_code'),'load_error':'source file could not be loaded' in case.get('stderr','')} for case in real['attempts']]}
+  summary={'source_sha256':real['source_sha256'],'source_bytes':real['source_bytes'],'normalized_shape_ids':real['normalized_shape_ids'],'attempts':[{'method':case['method'],'passed':case['passed'],'exit_code':case.get('exit_code'),'load_error':'source file could not be loaded' in case.get('stderr','')} for case in real['attempts']]}
   (results/'reported-drawing-summary.json').write_text(json.dumps(summary,indent=2))
-  assert any(case['passed'] for case in real['attempts']), 'Reported drawing fails all diagnostic import methods'
+  assert real['attempts'][-1]['method']=='compatible-shape-ids' and real['attempts'][-1]['passed'], 'Reported drawing fails the targeted shape-ID workaround'
+  assert not real['attempts'][0]['passed'], 'Baseline must reproduce the reported Windows failure'
  # Start a real Chromium browser separately against this still-running server.
  (results/'ui-url.txt').write_text(url,encoding='utf-8')
  (results/'server-ready.txt').write_text('ready')
