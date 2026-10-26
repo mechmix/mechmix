@@ -54,6 +54,10 @@ try:
   assert dest.resolve()==downloads_dir().resolve()
   assert pdf.read_bytes().startswith(b'%PDF-')
   shutil.copyfile(pdf,results/('HTTP-'+payload['filename']))
+ # Check the optional local diagnostics on generated input, without uploading its raw log.
+ from diagnose_visio import diagnose
+ diagnostic=diagnose(fixtures/'media-drawing.vsdx',results/'diagnostic-smoke')
+ assert len(diagnostic['attempts'])==5 and all(case['passed'] for case in diagnostic['attempts'])
  # Start a real Chromium browser separately against this still-running server.
  (results/'ui-url.txt').write_text(url,encoding='utf-8')
  (results/'server-ready.txt').write_text('ready')
@@ -61,7 +65,7 @@ try:
  while not (results/'ui-finished.txt').exists():
   if time.monotonic()>deadline:raise RuntimeError('Browser verification did not complete')
   time.sleep(.5)
- report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC','BDR'],'browser_endpoint':True,'self_checks':[{'input':r['input'],'format':r.get('format'),'passed':r['passed']} for r in checks['results']]}
+ report={'passed':True,'administrator':False,'launcher':True,'default_downloads':True,'formats':['VSD','VSDX','SOR','TRC','BDR'],'browser_endpoint':True,'diagnostic_methods':[{'method':case['method'],'passed':case['passed']} for case in diagnostic['attempts']],'self_checks':[{'input':r['input'],'format':r.get('format'),'passed':r['passed']} for r in checks['results']]}
  (results/'native-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 finally:
  process.terminate()
